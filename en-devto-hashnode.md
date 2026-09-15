@@ -1,14 +1,12 @@
-<!-- площадка: dev.to · формат: статья, 6–9 тыс. знаков, адаптация Хабра, не перевод · теги: ai, cli, bun, opensource · знаков: 6583 · статус: черновик -->
-
 # Your coding agent forgets on purpose. A PreCompact hook is where you save it
 
 Your coding agent doesn't have amnesia. It has a budget. When the context window fills up, the host compacts it into a summary — and summaries keep the *what* while losing the *why*. For engineering decisions, the why is everything.
 
-This is a story about the three days my agent re-did the same work, the exact moment where a decision can still be saved, and the tool I ended up writing about it: **myc** — an open-source (MIT), local task-and-memory layer for coding agents, built on Bun and TypeScript.
+This is a write-up of a tool I came across that is built around exactly that moment — the one where a decision can still be saved: **myc**, an open-source (MIT) local task-and-memory layer for coding agents, built on Bun and TypeScript. Its author describes three days of an agent re-doing the same work before writing it; the design follows from that.
 
-## The bug report was me
+## The bug report was the author
 
-The cycle looked like this. Early in a session we'd decide something: "we're doing X, not Y, because Z." Hours later the context got compacted, the reason drowned, and the agent — honestly, politely, with no memory of ever thinking otherwise — proposed Y again.
+The cycle, as the README tells it, looked like this. Early in a session you'd decide something: "we're doing X, not Y, because Z." Hours later the context got compacted, the reason drowned, and the agent — honestly, politely, with no memory of ever thinking otherwise — proposed Y again.
 
 Notice the failure mode: it's not that the agent forgot. It's that it *had no way to know there was something to remember*. Any memory layer you query after the fact is useless if nothing was written into it at the moment the context died.
 
@@ -46,7 +44,7 @@ The reasoning: a memory that hallucinates is worse than no memory, because it ge
 
 A memory tool lives in the agent's hot path — it gets called dozens of times per session. If it's slow, the agent starts economizing on it, and economizing on memory *is* forgetting. So every hot path in myc has a latency budget enforced by tests.
 
-Measured on 100,000 nodes (2026-09-11, darwin-arm64, p99):
+Measured on 100,000 nodes (2026-09-11, darwin-arm64, myc 0.3.6, p99):
 
 | operation | p99 | budget |
 |---|---|---|
@@ -64,6 +62,10 @@ bun run scripts/bench-latency.ts   # from a source checkout
 
 Honest footnote: those absolute numbers are calibrated on one machine, and CI doesn't enforce them on other hardware. CI *does* enforce structural claims (query plans, prefiltering) and relative ones (the healthy path measured against a deliberately degraded one, interleaved so hardware cancels out). Ranking is measured too: boosts take MRR@10 from 0.520 to 0.867, two-hop graph expansion from 0.193 to 0.422 — on corpora that contain a control group which gets *worse* when the feature works, so you can't fake a win by shaping the corpus.
 
+## Memory anchored to code — and honest when the code is gone
+
+Since 0.3.10 a note can be anchored to a span of code, and the anchor follows the code as it moves — across a refactor, even into another file (verified on TypeScript and Python). When the code is no longer where the anchor put it, the knowledge is not deleted: it ranks lower and says why. `recall` marks the row `[code moved ×0.64]`, `[code unverified ×0.5]` or `[code gone ×0.2]`; knowledge whose every anchor is lost stays out of `prime`, and the footer counts it: `N with code gone hidden`. That is the answer to the question every memory tool eventually faces — "will it start lying to me in a month?" — and it is the part I have not seen elsewhere.
+
 ## The rest of the toolbox, one line each
 
 - **Tasks**: a graph with dependencies, blockers inherited down the parent chain, and atomic claims — two agents never get the same task.
@@ -77,7 +79,7 @@ Honest footnote: those absolute numbers are calibrated on one machine, and CI do
 
 - **Bun only.** The runtime binds to `bun:sqlite` — SQLite and sqlite-vec ship inside Bun with no native Node bindings. It will not start on plain Node.js or Deno. That's the deal: one runtime, one binary, zero native build steps.
 - **macOS and Linux**; on Windows use WSL — the launcher doesn't start in cmd or PowerShell.
-- **Single user.** No server, no team mode, no ACL. Those are designed and tracked (the team milestone is 3/14 subtasks closed), not implemented. Swarm routing and memory distillation haven't been started.
+- **Single user.** No server, no team mode, no ACL. Those are designed and tracked (the team milestone has open subtasks; the live count is on the site), not implemented. Swarm routing and memory distillation haven't been started.
 
 ## Try it and break it
 
@@ -86,7 +88,7 @@ bun install -g @aistastudio/myc   # 3.42 MB, pulls nothing
 myc init && myc wire              # hooks + MCP for Claude Code, Codex, opencode, Kimi
 ```
 
-The project is a week old and shipping a release close to every day, which is another way of saying: now is the cheapest time to tell the author what's wrong. If you run agents daily, I'd genuinely like to know whether decisions survive your sessions today, and if not — whether a compaction hook feels like the right place to save them.
+The project is about a week old and ships a release close to every day, which is another way of saying: now is the cheapest time to tell the author what's wrong. If you run agents daily, the question worth answering in the issues is whether decisions survive your sessions today — and if not, whether a compaction hook feels like the right place to save them.
 
 Repo: https://github.com/aistastudio/myc
 Site (every number printed next to the command that reproduces it): https://aistastudio.github.io/myc/
